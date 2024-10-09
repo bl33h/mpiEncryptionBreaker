@@ -11,6 +11,7 @@ Last modification: 08/10/2024
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 #define LIGHT_MAGENTA "\x1B[95m"
 #define LIGHT_GREEN "\x1B[92m"
@@ -63,6 +64,8 @@ int keysTrial(long keyToTest, char* source, char* searchedText) {
 }
 
 int main(int argc, char* argv[]) {
+    clock_t start_time = clock();
+
     if (argc < 4) {
         ErrorInfo errorInfo = { "• usage: ./naive <input file name> <key> <search file name>", EXIT_FAILURE };
         handleError(errorInfo);
@@ -150,5 +153,10 @@ int main(int argc, char* argv[]) {
     printf(YELLOW "\n✓ decrypted string: %s\n" RESET, decryptedText);
     free(inputText);
     free(searchedText);
+
+    clock_t end_time = clock();
+    double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+    printf("\n✱ execution time: %.2f seconds\n", time_taken);
+
     return EXIT_SUCCESS;
 }
