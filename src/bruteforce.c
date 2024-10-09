@@ -141,9 +141,9 @@ int main(int argc, char* argv[]) {
     DES_key_schedule foundKeySchedule;
     DES_set_key_unchecked((DES_cblock*)&foundKey, &foundKeySchedule);
     decrypt(encryptedText, decryptedText, schedule);
-    printf(LIGHT_BLUE "-> original text: %s\n" RESET, inputText);
-    printf(YELLOW "!encrypted text: %s\n" RESET, encryptedText);
+    printf(LIGHT_BLUE "-> original string: %s\n" RESET, inputText);
+    printf(YELLOW "!encrypted string: %s\n" RESET, encryptedText);
     decryptedText[(int)strlen(decryptedText) - (int)strlen(encryptedText)] = '\0';
-    printf(LIGHT_MAGENTA "\n✓ decrypted text: %s\n" RESET, decryptedText);
+    printf(LIGHT_MAGENTA "\n✓ decrypted string: %s\n" RESET, decryptedText);
     return EXIT_SUCCESS;
 }
