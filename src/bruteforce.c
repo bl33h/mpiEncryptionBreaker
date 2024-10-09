@@ -4,158 +4,146 @@ Copyright (C), 2024-2025, bl33h, Mendezg1, MelissaPerez09
 FileName: bruteforce.c
 @version: I
 Creation: 06/10/2024
-Last modification: 07/10/2024
+Last modification: 08/10/2024
 ------------------------------------------------------------------------------*/
-
 #include <openssl/des.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
 
-#define BLOCK_SIZE 8
-#define KEY_LENGTH 56
+#define LIGHT_MAGENTA "\x1B[95m"
+#define LIGHT_GREEN "\x1B[92m"
+#define LIGHT_BLUE "\x1B[94m"
+#define YELLOW "\x1B[33m"
+#define RESET "\x1B[0m"
 
-void process(const char* source, char* destiny, DES_key_schedule schedule, int mode) {
-    for (size_t i = 0; i < strlen(source); i += BLOCK_SIZE) {
-        char block[BLOCK_SIZE] = {0};
-        memcpy(block, source + i, BLOCK_SIZE);
-        char processedBlock[BLOCK_SIZE] = {0};
-        DES_ecb_encrypt((const_DES_cblock*)block, (DES_cblock*)processedBlock, &schedule, mode);
-        memcpy(destiny + i, processedBlock, BLOCK_SIZE);
+typedef struct {
+    int code;
+    char message[256];
+} Error;
+
+void handleError(Error err) {
+    if (err.code != 0) {
+        fprintf(stderr, LIGHT_MAGENTA "%s\n" RESET, err.message);
+        exit(err.code);
     }
 }
 
-void encrypt(const char* source, char* destiny, DES_key_schedule schedule) {
-    process(source, destiny, schedule, DES_ENCRYPT);
+Error checkFile(FILE* file, const char* filename) {
+    Error err = {0, ""};
+    if (!file) {
+        sprintf(err.message, LIGHT_MAGENTA "!error opening the file: %s.\n" RESET, filename);
+        err.code = EXIT_FAILURE;
+    }
+    return err;
 }
 
-void decrypt(const char* source, char* destiny, DES_key_schedule schedule) {
-    process(source, destiny, schedule, DES_DECRYPT);
+Error checkMemory(void* ptr) {
+    Error err = {0, ""};
+    if (!ptr) {
+        sprintf(err.message, LIGHT_MAGENTA "!error allocating memory.\n" RESET);
+        err.code = EXIT_FAILURE;
+    }
+    return err;
 }
 
-int tryKey(long keyToTest, const char* source, const char* searchedText) {
+void encrypt(char* source, char* destiny, DES_key_schedule schedule) {
+    for (int i = 0; i < strlen(source); i += 8) {
+        char originalSentence[8] = { source[i], source[i + 1], source[i + 2], source[i + 3], source[i + 4], source[i + 5], source[i + 6], source[i + 7] };
+        char encryptedSentence[8] = { "" };
+        DES_ecb_encrypt((const_DES_cblock*)originalSentence, (DES_cblock*)encryptedSentence, &schedule, DES_ENCRYPT);
+        for (int j = 0; j < 8; j++) {
+            destiny[i + j] = encryptedSentence[j];
+        }
+    }
+}
+
+void decrypt(char* source, char* destiny, DES_key_schedule schedule) {
+    for (int i = 0; i < strlen(source); i += 8) {
+        char encryptedSentence[8] = { source[i], source[i + 1], source[i + 2], source[i + 3], source[i + 4], source[i + 5], source[i + 6], source[i + 7] };
+        char decryptedSentence[8] = { "" };
+        DES_ecb_encrypt((const_DES_cblock*)encryptedSentence, (DES_cblock*)decryptedSentence, &schedule, DES_DECRYPT);
+        for (int j = 0; j < 8; j++) {
+            destiny[i + j] = decryptedSentence[j];
+        }
+    }
+}
+
+int keysTrial(long keyToTest, char* source, char* searchedText) {
     char stringKey[256];
-    snprintf(stringKey, sizeof(stringKey), "%ld", keyToTest);
+    sprintf(stringKey, "%ld", keyToTest);
     DES_cblock temporalKeyToTest;
     DES_key_schedule temporalSchedule;
     DES_string_to_key(stringKey, &temporalKeyToTest);
     DES_set_key((const_DES_cblock*)&temporalKeyToTest, &temporalSchedule);
-    
-    size_t textLength = strlen(source);
-    char* temporalText = (char*)calloc(textLength + 1, sizeof(char));
-    if (!temporalText) {
-        perror("!error allocating memory for temporary text.\n");
-        return 0;
-    }
-
+    char temporalText[strlen(source)];
     decrypt(source, temporalText, temporalSchedule);
-    int found = (strstr(temporalText, searchedText) != NULL);
-    free(temporalText);
-    return found;
-}
-
-char* readFile(const char* filePath, long* fileLength) {
-    FILE* file = fopen(filePath, "rb");
-    if (!file) {
-        perror("!error opening the file.\n");
-        return NULL;
-    }
-
-    fseek(file, 0, SEEK_END);
-    *fileLength = ftell(file);
-    rewind(file);
-
-    char* buffer = (char*)calloc(*fileLength + 1, sizeof(char));
-    if (!buffer) {
-        perror("!error allocating memory for the file.\n");
-        fclose(file);
-        return NULL;
-    }
-
-    if (fread(buffer, 1, *fileLength, file) != *fileLength) {
-        perror("!error reading the file.\n");
-        free(buffer);
-        fclose(file);
-        return NULL;
-    }
-
-    fclose(file);
-    return buffer;
+    return (strstr((char*)temporalText, searchedText) != NULL);
 }
 
 int main(int argc, char* argv[]) {
     if (argc < 4) {
-        fprintf(stderr, "• usage: ./naivePar <input file name> <key> <search file name>\n");
-        return EXIT_FAILURE;
+        handleError((Error){EXIT_FAILURE, LIGHT_MAGENTA "• usage: ./bruteforce <input file name> <key> <search file name>\n\n" RESET});
     }
 
     char* filePath = argv[1];
     char* inputKey = argv[2];
     char* searchedTextPath = argv[3];
-    long upperBound = (1L << KEY_LENGTH);
-    long fileLength, searchedFileLength;
+    long upperBound = (1L << 56);
 
-    char* inputText = readFile(filePath, &fileLength);
-    if (!inputText) return EXIT_FAILURE;
+    FILE* inputFile = fopen(filePath, "rb");
+    handleError(checkFile(inputFile, filePath));
 
-    char* searchedText = readFile(searchedTextPath, &searchedFileLength);
-    if (!searchedText) {
-        free(inputText);
-        return EXIT_FAILURE;
+    fseek(inputFile, 0, SEEK_END);
+    long fileLength = ftell(inputFile);
+    rewind(inputFile);
+    char* inputText = (char*)malloc(fileLength);
+    handleError(checkMemory(inputText));
+
+    if (fread(inputText, 1, fileLength, inputFile) != fileLength) {
+        handleError((Error){EXIT_FAILURE, LIGHT_MAGENTA "!error reading the file." RESET});
     }
 
+    fclose(inputFile);
+
+    FILE* searchedTextFile = fopen(searchedTextPath, "rb");
+    handleError(checkFile(searchedTextFile, searchedTextPath));
+
+    fseek(searchedTextFile, 0, SEEK_END);
+    long searchedFileLength = ftell(searchedTextFile);
+    rewind(searchedTextFile);
+    char* searchedText = (char*)malloc(searchedFileLength);
+    handleError(checkMemory(searchedText));
+
+    if (fread(searchedText, 1, searchedFileLength, searchedTextFile) != searchedFileLength) {
+        handleError((Error){EXIT_FAILURE, LIGHT_MAGENTA "!error reading the file." RESET});
+    }
+
+    fclose(searchedTextFile);
     DES_cblock key;
     DES_key_schedule schedule;
     DES_string_to_key(inputKey, &key);
     DES_set_key((const_DES_cblock*)&key, &schedule);
-
-    char* encryptedText = (char*)calloc(fileLength + 1, sizeof(char));
-    if (!encryptedText) {
-        perror("!error allocating memory for encrypted text.\n");
-        free(inputText);
-        free(searchedText);
-        return EXIT_FAILURE;
-    }
-
+    char encryptedText[strlen(inputText)];
+    char decryptedText[strlen(inputText)];
     encrypt(inputText, encryptedText, schedule);
     long foundKey = 0L;
-    int keyHasBeenFound = 0;
 
     for (long i = 0; i < upperBound; i++) {
-        if (tryKey(i, encryptedText, searchedText)) {
+        if (keysTrial(i, encryptedText, searchedText)) {
             foundKey = i;
-            printf("\n• key: %ld\n", foundKey);
-            keyHasBeenFound = 1;
+            printf(LIGHT_GREEN "\n• the key is: [%ld]\n" RESET, foundKey);
             break;
         }
     }
 
-    if (keyHasBeenFound) {
-        DES_key_schedule foundKeySchedule;
-        DES_set_key_unchecked((DES_cblock*)&foundKey, &foundKeySchedule);
-
-        char* decryptedText = (char*)calloc(fileLength + 1, sizeof(char));
-        if (!decryptedText) {
-            perror("!error allocating memory for decrypted text.\n");
-            free(inputText);
-            free(searchedText);
-            free(encryptedText);
-            return EXIT_FAILURE;
-        }
-
-        decrypt(encryptedText, decryptedText, foundKeySchedule);
-        printf("-> original text: %s\n", inputText);
-        printf("✓ encrypted text: %s\n", encryptedText);
-        printf("✓ decrypted text: %s\n", decryptedText);
-
-        free(decryptedText);
-    } else {
-        printf("!error, key not found.\n");
-    }
-
-    free(inputText);
-    free(searchedText);
-    free(encryptedText);
+    DES_key_schedule foundKeySchedule;
+    DES_set_key_unchecked((DES_cblock*)&foundKey, &foundKeySchedule);
+    decrypt(encryptedText, decryptedText, schedule);
+    printf(LIGHT_BLUE "-> original text: %s\n" RESET, inputText);
+    printf(YELLOW "!encrypted text: %s\n" RESET, encryptedText);
+    decryptedText[(int)strlen(decryptedText) - (int)strlen(encryptedText)] = '\0';
+    printf(LIGHT_MAGENTA "\n✓ decrypted text: %s\n" RESET, decryptedText);
     return EXIT_SUCCESS;
 }
