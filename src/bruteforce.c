@@ -11,6 +11,7 @@ Last modification: 08/10/2024
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h> // Incluye la biblioteca para medir el tiempo
 
 #define LIGHT_MAGENTA "\x1B[95m"
 #define LIGHT_GREEN "\x1B[92m"
@@ -83,6 +84,13 @@ int keysTrial(long keyToTest, char* source, char* searchedText) {
 }
 
 int main(int argc, char* argv[]) {
+    // Variables para medir el tiempo de ejecución
+    clock_t start, end;
+    double cpu_time_used;
+
+    // Iniciar el temporizador
+    start = clock();
+
     if (argc < 4) {
         handleError((Error){EXIT_FAILURE, LIGHT_MAGENTA "• usage: ./bruteforce <input file name> <key> <search file name>\n\n" RESET});
     }
@@ -145,5 +153,13 @@ int main(int argc, char* argv[]) {
     printf(YELLOW "!encrypted string: %s\n" RESET, encryptedText);
     decryptedText[(int)strlen(decryptedText) - (int)strlen(encryptedText)] = '\0';
     printf(LIGHT_MAGENTA "\n✓ decrypted string: %s\n" RESET, decryptedText);
+
+    // Detener el temporizador
+    end = clock();
+
+    // Calcular el tiempo de CPU utilizado
+    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf(LIGHT_BLUE "\nExecution time: %f seconds\n" RESET, cpu_time_used);
+
     return EXIT_SUCCESS;
 }
