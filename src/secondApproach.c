@@ -1,10 +1,10 @@
-/*--------------------------------------------------------------------------- 
+/*---------------------------------------------------------------------------
 Copyright (C), 2024-2025, bl33h, Mendezg1, MelissaPerez09
 @author Sara Echeverria, Ricardo Mendez, Melissa Perez
-FileName: firstApproach.c
-@version: II (previously called parallelVersion.c)
-Creation: 08/10/2024
-Last modification: 09/10/2024
+FileName: secondApproach.c
+@version: I
+Creation: 10/10/2024
+Last modification: 10/10/2024
 ------------------------------------------------------------------------------*/
 #include <openssl/des.h>
 #include <stdlib.h>
@@ -20,18 +20,6 @@ Last modification: 09/10/2024
 #define LIGHT_BLUE "\x1B[94m"
 #define YELLOW "\x1B[33m"
 #define RESET "\x1B[0m"
-
-// --- error information structure ---
-typedef struct {
-    char message[256];
-    int code;
-} ErrorInfo;
-
-// --- error handling function ---
-void handleError(ErrorInfo errorInfo) {
-    fprintf(stderr, LIGHT_MAGENTA "%s\n" RESET, errorInfo.message);
-    exit(errorInfo.code);
-}
 
 // --- encryption function ---
 void encrypt(char* source, char* destiny, DES_key_schedule schedule) {
@@ -57,36 +45,51 @@ void decrypt(char* source, char* destiny, DES_key_schedule schedule) {
     }
 }
 
-// --- function to trial keys 1 by 1 ---
-int keysTrial(long keyToTest, char* source, char* searchedText) {
-    char stringKey[256];
-    sprintf(stringKey, "%ld", keyToTest);
-    DES_cblock temporalKeyToTest;
-    DES_key_schedule temporalSchedule;
-    DES_string_to_key(stringKey, &temporalKeyToTest);
-    DES_set_key((const_DES_cblock*)&temporalKeyToTest, &temporalSchedule);
-    char temporalText[strlen(source)];
-    decrypt(source, temporalText, temporalSchedule);
-    return (strstr((char*)temporalText, searchedText) != NULL);
+// --- first and last keys checker ---
+int duoKeyTry(long firstKeyToTest, long secondKeyToTest, char* source, char* searchedText) {
+    char firstStringKey[256];
+    sprintf(firstStringKey, "%ld", firstKeyToTest);
+    DES_cblock firstTemporalKeyToTest;
+    DES_key_schedule firstTemporalSchedule;
+    DES_string_to_key(firstStringKey, &firstTemporalKeyToTest);
+    DES_set_key((const_DES_cblock*)&firstTemporalKeyToTest, &firstTemporalSchedule);
+    char firstTemporalText[strlen(source)];
+    decrypt(source, firstTemporalText, firstTemporalSchedule);
+    
+    char secondStringKey[256];
+    sprintf(secondStringKey, "%ld", secondKeyToTest);
+    DES_cblock secondTemporalKeyTest;
+    DES_key_schedule secondTemporalSchedule;
+    DES_string_to_key(secondStringKey, &secondTemporalKeyTest);
+    DES_set_key((const_DES_cblock*)&secondTemporalKeyTest, &secondTemporalSchedule);
+    char secondTemporalText[strlen(source)];
+    decrypt(source, secondTemporalText, secondTemporalSchedule);
+    
+    if (strstr(firstTemporalText, searchedText) != NULL) {
+        return firstKeyToTest;
+    } else if (strstr(secondTemporalText, searchedText) != NULL) {
+        return secondKeyToTest;
+    } else {
+        return 0;
+    }
 }
 
 // --- main function ---
 int main(int argc, char* argv[]) {
     if (argc < 4) {
-        ErrorInfo errorInfo = { "• usage: mpirun --allow-run-as-root -np 4 ./approach1 <input file name> <key> <search file name>", EXIT_FAILURE };
-        handleError(errorInfo);
+        perror("• usage: mpirun --allow-run-as-root -np 4 ./approach2 <input file name> <key> <search file name>\n");
+        return EXIT_FAILURE;
     }
-
     char* filePath = argv[1];
     char* inputKey = argv[2];
     char* searchedTextPath = argv[3];
     int threads, rank;
     long upperBound = (1L << 56);
-    FILE* inputFile = fopen(filePath, "rb");
 
+    FILE* inputFile = fopen(filePath, "rb");
     if (!inputFile) {
-        ErrorInfo errorInfo = { "!error opening the file.", EXIT_FAILURE };
-        handleError(errorInfo);
+        perror("!error opening the file.\n");
+        return EXIT_FAILURE;
     }
 
     fseek(inputFile, 0, SEEK_END);
@@ -95,25 +98,24 @@ int main(int argc, char* argv[]) {
     char* inputText = (char*)malloc(fileLength);
 
     if (!inputText) {
-        ErrorInfo errorInfo = { "!error allocating memory for the file.", EXIT_FAILURE };
+        perror("!error allocating memory for the file.\n");
         fclose(inputFile);
-        handleError(errorInfo);
+        return EXIT_FAILURE;
     }
 
     if (fread(inputText, 1, fileLength, inputFile) != fileLength) {
-        ErrorInfo errorInfo = { "!error reading the file.", EXIT_FAILURE };
+        perror("!error reading the file.\n");
         free(inputText);
         fclose(inputFile);
-        handleError(errorInfo);
+        return EXIT_FAILURE;
     }
 
     fclose(inputFile);
-
+    
     FILE* searchedTextFile = fopen(searchedTextPath, "rb");
-
     if (!searchedTextFile) {
-        ErrorInfo errorInfo = { "!error opening the search file.", EXIT_FAILURE };
-        handleError(errorInfo);
+        perror("!error opening the search file.\n");
+        return EXIT_FAILURE;
     }
 
     fseek(searchedTextFile, 0, SEEK_END);
@@ -122,26 +124,26 @@ int main(int argc, char* argv[]) {
     char* searchedText = (char*)malloc(searchedFileLength);
 
     if (!searchedText) {
-        ErrorInfo errorInfo = { "!error allocating memory for the search file.", EXIT_FAILURE };
+        perror("!error allocating memory for the search file.\n");
         fclose(searchedTextFile);
-        handleError(errorInfo);
+        return EXIT_FAILURE;
     }
 
     if (fread(searchedText, 1, searchedFileLength, searchedTextFile) != searchedFileLength) {
-        ErrorInfo errorInfo = { "!error reading the search file.", EXIT_FAILURE };
+        perror("!error reading the search file.\n");
         free(searchedText);
         fclose(searchedTextFile);
-        handleError(errorInfo);
+        return EXIT_FAILURE;
     }
 
     fclose(searchedTextFile);
-
+    
     // --- key setup ---
     DES_cblock key;
     DES_key_schedule schedule;
     DES_string_to_key(inputKey, &key);
-    DES_set_key((const_DES_cblock*)&key, &schedule); 
-
+    DES_set_key((const_DES_cblock*)&key, &schedule);
+    
     // encryption
     char encryptedText[strlen(inputText)];
     char decryptedText[strlen(inputText)];
@@ -153,29 +155,32 @@ int main(int argc, char* argv[]) {
     MPI_Request request;
     MPI_Comm_size(MPI_COMM_WORLD, &threads);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    
+    // --- key search ---
     long foundKey = 0L;
     int keyHasBeenFound = 0;
     long boundPerThread = (upperBound / threads);
     long localLowerBound = (boundPerThread * rank);
     long localUpperBound = ((boundPerThread * (rank + 1)) - 1);
-
     if (rank == (threads - 1)) {
         localUpperBound = upperBound;
     }
 
     MPI_Irecv(&foundKey, 1, MPI_LONG, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
-    
+
     // --- timer ---
     clock_t startTime = clock();
-
-    for (long i = localLowerBound; i < localUpperBound; i++) {
+    
+    for (long i = 0; i < (((localUpperBound - localLowerBound) / 2) + 1); i++) {
         MPI_Test(&request, &keyHasBeenFound, MPI_STATUS_IGNORE);
-        
+
         if (keyHasBeenFound) break;
 
-        if (keysTrial(i, encryptedText, searchedText)) {
-            foundKey = i;
-            printf(LIGHT_GREEN "\n• the key is: [%ld]\n" RESET, foundKey);
+        long response = duoKeyTry((localLowerBound + i), (localUpperBound - i), encryptedText, searchedText);
+        
+        if (response > 0) {
+            foundKey = response;
+            printf(LIGHT_MAGENTA "\n• the key is: [%ld]\n" RESET, foundKey);
             for (int node = 0; node < threads; node++) {
                 MPI_Send(&foundKey, 1, MPI_LONG, node, 0, MPI_COMM_WORLD);
             }
@@ -188,18 +193,18 @@ int main(int argc, char* argv[]) {
         DES_key_schedule foundKeySchedule;
         DES_set_key_unchecked((DES_cblock*)&foundKey, &foundKeySchedule);
         decrypt(encryptedText, decryptedText, schedule);
-        printf(YELLOW "-> original string: %s\n" RESET, inputText);
-        printf(LIGHT_BLUE "!encrypted string: %s\n" RESET, encryptedText);
+        printf(LIGHT_GREEN "-> original string: %s\n" RESET, inputText);
+        printf(YELLOW "!encrypted string: %s\n" RESET, encryptedText);
         decryptedText[(int)strlen(decryptedText) - (int)strlen(encryptedText)] = '\0';
-        printf(LIGHT_MAGENTA "\n✓ decrypted string: %s\n" RESET, decryptedText);
-        
-        clock_t endTime = clock(); 
-        double timeTaken = (double)(endTime - startTime) / CLOCKS_PER_SEC;
+        printf(LIGHT_BLUE "\n✓ decrypted string: %s\n" RESET, decryptedText);
+    }
+    
+    clock_t endTime = clock();
+    double timeTaken = ((double)(endTime - startTime)) / CLOCKS_PER_SEC;
+    if (rank == 0) {
         printf("\n✱ total execution time: %.2f seconds\n", timeTaken);
     }
 
-    free(inputText);
-    free(searchedText);
     MPI_Finalize();
     return EXIT_SUCCESS;
 }
